@@ -1,0 +1,11 @@
+IntegrityChecker/
+│── integrity_checker.py  # Main script
+│── database.py           # Database functions
+│── hashing.py            # Hashing functions
+│── scanner.py            # Directory scanning functions
+│── gui.py                # GUI with Tkinter
+│── email_alerts.py       # Email notification module
+│── README.md             # Documentation
+│── requirements.txt      # Dependencies
+│── LICENSE               # Open-source license
+│── .gitignore            # Ignore unnecessary files
