@@ -18,6 +18,8 @@ def connect_db():
         port=os.getenv("PGPORT")
     )
 
+# Ensure the database connection is established and the table is created
+# before any operations are performed.
 def create_table():
     conn = connect_db()
     cur = conn.cursor()
