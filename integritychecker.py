@@ -1,3 +1,6 @@
+# Before running this script, ensure you have the required packages installed:
+# pip install psycopg2-binary python-dotenv PyQt5 requests
+
 import hashlib
 import psycopg2
 from dotenv import load_dotenv
