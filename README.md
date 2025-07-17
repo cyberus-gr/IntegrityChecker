@@ -26,28 +26,6 @@ python IntegrityChecker.py
 # Creating an Executable (.exe)
 pyinstaller --onefile --windowed integrity_checker.py
 
-
-# .env (example - fill with your actual credentials)
-
-# PostgreSQL Configuration
-# PGDATABASE=file_checker
-# PGUSER=postgres
-# PGPASSWORD=your_db_password
-# PGHOST=localhost
-# PGPORT=5432
-
-# VirusTotal API Key
-# VT_API_KEY=your_virustotal_api_key
-
-# Email Alert Configuration
-# EMAIL_SERVER=smtp.gmail.com
-# EMAIL_PORT=587
-# EMAIL_USER=your_email@gmail.com
-# EMAIL_PASSWORD=your_app_password
-# ALERT_RECIPIENT=alerts@yourdomain.com
-
-
-
 ---
 
 ## **📌 4. Add a `.gitignore`**
