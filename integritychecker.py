@@ -1,17 +1,22 @@
-# integritychecker.py
 import hashlib
-import psycopg2
+import sqlite3
 from dotenv import load_dotenv
 import logging
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QFileDialog, QMessageBox, QVBoxLayout, QWidget)
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QPushButton, QFileDialog, QMessageBox, 
+    QVBoxLayout, QWidget, QLineEdit, QDialog, QLabel, QDialogButtonBox,
+    QFormLayout
+)
+from PyQt5.QtCore import Qt
 import os
 import datetime
 import requests
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import re
 
-# Initialize logging once
+# Initialize logging
 logging.basicConfig(
     filename="integrity.log",
     level=logging.INFO,
@@ -19,23 +24,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger("integrity_checker")
 
-load_dotenv()  # Load environment variables from .env file
+# Create default .env if doesn't exist
+if not os.path.exists('.env'):
+    with open('.env', 'w') as f:
+        f.write("# Configuration file\n")
+        f.write("DB_PATH=file_integrity.db\n")
+        f.write("VT_API_KEY=\n")
+        f.write("EMAIL_SERVER=\n")
+        f.write("EMAIL_PORT=587\n")
+        f.write("EMAIL_USER=\n")
+        f.write("EMAIL_PASSWORD=\n")
+        f.write("ALERT_RECIPIENT=\n")
+
+load_dotenv()
 
 def connect_db():
-    return psycopg2.connect(
-        dbname=os.getenv("PGDATABASE"),
-        user=os.getenv("PGUSER"),
-        password=os.getenv("PGPASSWORD"),
-        host=os.getenv("PGHOST"),
-        port=os.getenv("PGPORT")
-    )
+    db_path = os.getenv("DB_PATH", "file_integrity.db")
+    return sqlite3.connect(db_path)
 
 def create_table():
     conn = connect_db()
     cur = conn.cursor()
     cur.execute('''
     CREATE TABLE IF NOT EXISTS file_integrity (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         file_path TEXT UNIQUE NOT NULL,
         hash_value TEXT,
         last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -59,7 +71,7 @@ def compute_hash(file_path):
 def check_integrity(file_path):
     conn = connect_db()
     cur = conn.cursor()
-    cur.execute("SELECT hash_value FROM file_integrity WHERE file_path = %s", (file_path,))
+    cur.execute("SELECT hash_value FROM file_integrity WHERE file_path = ?", (file_path,))
     result = cur.fetchone()
     
     new_hash = compute_hash(file_path)
@@ -77,20 +89,20 @@ def check_integrity(file_path):
     if status == "Missing":
         cur.execute(
             "INSERT INTO file_integrity (file_path, hash_value, status) "
-            "VALUES (%s, NULL, %s) "
+            "VALUES (?, NULL, ?) "
             "ON CONFLICT (file_path) DO UPDATE SET "
-            "hash_value = EXCLUDED.hash_value, "
+            "hash_value = excluded.hash_value, "
             "last_checked = CURRENT_TIMESTAMP, "
-            "status = EXCLUDED.status",
-            (file_path, status)
+            "status = excluded.status",
+            (file_path, status))
     else:
         cur.execute(
             "INSERT INTO file_integrity (file_path, hash_value, status) "
-            "VALUES (%s, %s, %s) "
+            "VALUES (?, ?, ?) "
             "ON CONFLICT (file_path) DO UPDATE SET "
-            "hash_value = EXCLUDED.hash_value, "
+            "hash_value = excluded.hash_value, "
             "last_checked = CURRENT_TIMESTAMP, "
-            "status = EXCLUDED.status",
+            "status = excluded.status",
             (file_path, new_hash, status))
     
     conn.commit()
@@ -122,7 +134,7 @@ def check_virustotal(hash_value):
             return 0, 0
         else:
             logger.error(f"VirusTotal API error: {response.status_code}")
-            return -1, -1  # Special error code
+            return -1, -1
     except Exception as e:
         logger.error(f"VirusTotal request failed: {e}")
         return -1, -1
@@ -162,6 +174,103 @@ def send_alert(file_path, status):
     except Exception as e:
         logger.error(f"Failed to send email alert: {e}")
 
+class SettingsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuration Settings")
+        self.setGeometry(200, 200, 400, 300)
+        
+        layout = QFormLayout()
+        
+        # VirusTotal API
+        self.vtApiEdit = QLineEdit(os.getenv("VT_API_KEY", ""))
+        layout.addRow("VirusTotal API Key:", self.vtApiEdit)
+        
+        # Email Settings
+        self.emailServerEdit = QLineEdit(os.getenv("EMAIL_SERVER", ""))
+        layout.addRow("Email Server:", self.emailServerEdit)
+        
+        self.emailPortEdit = QLineEdit(os.getenv("EMAIL_PORT", "587"))
+        layout.addRow("Email Port:", self.emailPortEdit)
+        
+        self.emailUserEdit = QLineEdit(os.getenv("EMAIL_USER", ""))
+        layout.addRow("Email User:", self.emailUserEdit)
+        
+        self.emailPassEdit = QLineEdit(os.getenv("EMAIL_PASSWORD", ""))
+        self.emailPassEdit.setEchoMode(QLineEdit.Password)
+        layout.addRow("Email Password:", self.emailPassEdit)
+        
+        self.recipientEdit = QLineEdit(os.getenv("ALERT_RECIPIENT", ""))
+        layout.addRow("Alert Recipient:", self.recipientEdit)
+        
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Save | QDialogButtonBox.Cancel,
+            Qt.Horizontal, self
+        )
+        buttons.accepted.connect(self.save_settings)
+        buttons.rejected.connect(self.reject)
+        
+        layout.addRow(buttons)
+        self.setLayout(layout)
+    
+    def save_settings(self):
+        # Validate port number
+        try:
+            port = int(self.emailPortEdit.text())
+            if not (1 <= port <= 65535):
+                raise ValueError("Invalid port number")
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a valid port number (1-65535)")
+            return
+        
+        # Validate email format if provided
+        if self.recipientEdit.text() and not re.match(r"[^@]+@[^@]+\.[^@]+", self.recipientEdit.text()):
+            QMessageBox.warning(self, "Invalid Email", "Please enter a valid email address for the recipient")
+            return
+        
+        # Update .env file
+        env_lines = []
+        if os.path.exists('.env'):
+            with open('.env', 'r') as f:
+                env_lines = f.readlines()
+        
+        new_env = []
+        settings = {
+            "VT_API_KEY": self.vtApiEdit.text(),
+            "EMAIL_SERVER": self.emailServerEdit.text(),
+            "EMAIL_PORT": self.emailPortEdit.text(),
+            "EMAIL_USER": self.emailUserEdit.text(),
+            "EMAIL_PASSWORD": self.emailPassEdit.text(),
+            "ALERT_RECIPIENT": self.recipientEdit.text()
+        }
+        
+        # Update existing settings
+        found_settings = {k: False for k in settings.keys()}
+        for line in env_lines:
+            if line.strip() and not line.startswith('#'):
+                key = line.split('=')[0].strip()
+                if key in settings:
+                    new_env.append(f"{key}={settings[key]}\n")
+                    found_settings[key] = True
+                    continue
+            new_env.append(line)
+        
+        # Add new settings
+        for key, found in found_settings.items():
+            if not found and settings[key]:
+                new_env.append(f"{key}={settings[key]}\n")
+        
+        # Write back to .env
+        with open('.env', 'w') as f:
+            f.writelines(new_env)
+        
+        # Reload environment
+        load_dotenv(override=True)
+        
+        QMessageBox.information(self, "Success", "Settings saved successfully!")
+        self.accept()
+
 class IntegrityCheckerGUI(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -185,7 +294,11 @@ class IntegrityCheckerGUI(QMainWindow):
         self.scanFolderButton.clicked.connect(self.scanFolder)
         layout.addWidget(self.scanFolderButton)
         
-        self.statusButton = QPushButton("Check Status")
+        self.settingsButton = QPushButton("Configure Settings")
+        self.settingsButton.clicked.connect(self.showSettings)
+        layout.addWidget(self.settingsButton)
+        
+        self.statusButton = QPushButton("View Scan History")
         self.statusButton.clicked.connect(self.showStatus)
         layout.addWidget(self.statusButton)
     
@@ -202,11 +315,18 @@ class IntegrityCheckerGUI(QMainWindow):
                     file_path = os.path.join(root, file)
                     self.process_file(file_path)
     
+    def showSettings(self):
+        dialog = SettingsDialog(self)
+        dialog.exec_()
+    
     def showStatus(self):
-        msg = QMessageBox()
-        msg.setWindowTitle("Scan Status")
-        msg.setText("Check integrity.log for complete scan history")
-        msg.exec_()
+        try:
+            os.startfile("integrity.log")
+        except:
+            msg = QMessageBox()
+            msg.setWindowTitle("Scan History")
+            msg.setText("Open integrity.log to view complete scan history")
+            msg.exec_()
     
     def process_file(self, file_path):
         status, hash_value = check_integrity(file_path)

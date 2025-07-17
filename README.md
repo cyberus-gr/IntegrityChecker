@@ -1,10 +1,10 @@
 # File Integrity Checker
 
-A GUI-based file integrity monitor with PostgreSQL storage, email alerts, and VirusTotal integration.
+A user-friendly,GUI-based file integrity monitor with sql storage, email alerts, and VirusTotal integration.
 
 ## Features
 ✅ File hash verification (SHA-256)  
-✅ PostgreSQL database storage  
+✅ Automatic SQLite database setup    
 📧 Email alerts on file changes  
 🖥️ PyQt5 GUI interface  
 🔍 VirusTotal threat detection  
