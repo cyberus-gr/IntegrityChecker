@@ -1,16 +1,18 @@
 # File Integrity Checker
 
-A simple GUI-based file integrity checker using Python.
+A GUI-based file integrity monitor with PostgreSQL storage, email alerts, and VirusTotal integration.
 
 ## Features
-✅ Hash file verification  
+✅ File hash verification (SHA-256)  
 ✅ PostgreSQL database storage  
-✅ Email alerts on file changes  
-✅ GUI for easy use  
+📧 Email alerts on file changes  
+🖥️ PyQt5 GUI interface  
+🔍 VirusTotal threat detection  
+📁 Folder scanning capability 
 
 ## Installation
 1. Clone the repository:
-   ```sh
+   ```bash
    git clone https://github.com/yourusername/IntegrityChecker.git
    cd IntegrityChecker
 
@@ -23,6 +25,26 @@ python IntegrityChecker.py
 
 # Creating an Executable (.exe)
 pyinstaller --onefile --windowed integrity_checker.py
+
+
+# .env (example - fill with your actual credentials)
+
+# PostgreSQL Configuration
+# PGDATABASE=file_checker
+# PGUSER=postgres
+# PGPASSWORD=your_db_password
+# PGHOST=localhost
+# PGPORT=5432
+
+# VirusTotal API Key
+# VT_API_KEY=your_virustotal_api_key
+
+# Email Alert Configuration
+# EMAIL_SERVER=smtp.gmail.com
+# EMAIL_PORT=587
+# EMAIL_USER=your_email@gmail.com
+# EMAIL_PASSWORD=your_app_password
+# ALERT_RECIPIENT=alerts@yourdomain.com
 
 
 
