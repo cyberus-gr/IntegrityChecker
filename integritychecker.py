@@ -52,6 +52,7 @@ def create_table():
         hash_value TEXT,
         last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status TEXT CHECK (status IN ('Secure', 'Modified', 'Missing', 'New'))
+        )
     ''')
     conn.commit()
     cur.close()

@@ -2,3 +2,5 @@ INFO:root:2025-04-05 21:06:47.699984 - New: C:/Users/Cyberus/Downloads/AnyDesk.e
 INFO:root:2025-04-05 21:07:10.309480 - New: C:/Users/Cyberus/Downloads/Advanced_IP_Scanner_2.5.4594.1.exe
 INFO:root:2025-04-05 21:07:47.135335 - New: C:/Users/Cyberus/Downloads/Michael_Cappello_CV.pdf
 INFO:root:2025-04-05 21:10:50.415266 - Secure: C:/Users/Cyberus/Downloads/Advanced_IP_Scanner_2.5.4594.1.exe
+2025-07-20 19:20:32,377 - INFO - New: /home/cyberus/Documents/Michael_Cappello_CV.pdf
+2025-07-20 19:20:33,114 - ERROR - VirusTotal API error: 401
