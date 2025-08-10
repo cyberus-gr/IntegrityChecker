@@ -11,6 +11,8 @@ A user-friendly,GUI-based file integrity monitor with sql storage, email alerts,
 📁 Folder scanning capability  
 🔒 Credential cleanup system  
 
+---
+
 ## Installation
 1. Clone the repository:
    ```bash
