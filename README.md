@@ -34,12 +34,14 @@ pyinstaller --onefile --windowed integrity_checker.py
 
 ## Security Workflow
 
+```mermaid
 graph LR
-A[Launch App] --> B[Enter Credentials]
-B --> C[Scan Files]
-C --> D{Enable Auto-Clean?}
-D -->|Yes| E[Credentials auto-wiped on exit]
-D -->|No| F[Manual cleanup via button]
+    A[Launch App] --> B[Enter Credentials]
+    B --> C[Scan Files]
+    C --> D{Enable Auto-Clean?}
+    D -->|Yes| E[Credentials auto-wiped on exit]
+    D -->|No| F[Manual cleanup via button]
+```
 
 2. Protecting Your Credentials:
    Automatic Cleanup:
