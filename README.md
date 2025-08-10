@@ -8,13 +8,15 @@ A user-friendly,GUI-based file integrity monitor with sql storage, email alerts,
 📧 Email alerts on file changes  
 🖥️ PyQt5 GUI interface  
 🔍 VirusTotal threat detection  
-📁 Folder scanning capability 
+📁 Folder scanning capability  
+🔒 Credential cleanup system  
 
 ## Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/IntegrityChecker.git
+   git clone https://github.com/mmcyberus/IntegrityChecker.git
    cd IntegrityChecker
+   
 
 ## Install Dependencies
 pip install -r requirements.txt
@@ -22,9 +24,31 @@ pip install -r requirements.txt
 ## Run the application 
 python IntegrityChecker.py
 
+# Run script with temporary credentials
+VT_API_KEY="your-key" python integritychecker.py
 
 # Creating an Executable (.exe)
 pyinstaller --onefile --windowed integrity_checker.py
+
+## Security Workflow
+
+graph LR
+A[Launch App] --> B[Enter Credentials]
+B --> C[Scan Files]
+C --> D{Enable Auto-Clean?}
+D -->|Yes| E[Credentials auto-wiped on exit]
+D -->|No| F[Manual cleanup via button]
+
+2. Protecting Your Credentials:
+   Automatic Cleanup:
+      Click "Clear Sensitive Data" before closing the app OR set auto-cleanup in .env:
+         AUTO_CLEANUP=1
+   Secure File Permissions:
+      Make .env read-only after configuration
+      chmod 400 .env
+   Temporary Session Mode:
+      Run without saving credentials to disk
+      VT_API_KEY="your-key" EMAIL_PASSWORD="app-password" python integritychecker.py
 
 ---
 
@@ -56,6 +80,9 @@ pyinstaller --onefile --windowed integrity_checker.py
 
 
 ## Push to GitHub
+git init
+git add .
+git commit -m "Secure integrity checker"
 git branch -M main
-git remote add origin https://github.com/yourusername/IntegrityChecker.git
+git remote add origin https://github.com/mmcyberus/IntegrityChecker.git
 git push -u origin main

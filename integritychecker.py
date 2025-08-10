@@ -15,6 +15,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
+import sys
 
 # Initialize logging
 logging.basicConfig(
@@ -175,6 +176,31 @@ def send_alert(file_path, status):
     except Exception as e:
         logger.error(f"Failed to send email alert: {e}")
 
+def clean_env_file():
+    """Securely removes sensitive values from .env file"""
+    env_path = '.env'
+    if not os.path.exists(env_path):
+        return
+
+    sensitive_keys = [
+        'VT_API_KEY',
+        'EMAIL_PASSWORD',
+        'EMAIL_USER',
+        'ALERT_RECIPIENT'
+    ]
+    
+    cleaned_lines = []
+    with open(env_path, 'r') as f:
+        for line in f:
+            # Preserve comments and non-sensitive values
+            if any(line.strip().startswith(key + '=') for key in sensitive_keys):
+                key = line.split('=', 1)[0].strip()
+                line = f"{key}=\n"
+            cleaned_lines.append(line)
+    
+    with open(env_path, 'w') as f:
+        f.writelines(cleaned_lines)
+
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -302,6 +328,10 @@ class IntegrityCheckerGUI(QMainWindow):
         self.statusButton = QPushButton("View Scan History")
         self.statusButton.clicked.connect(self.showStatus)
         layout.addWidget(self.statusButton)
+
+        self.cleanupButton = QPushButton("Clear Sensitive Data")
+        self.cleanupButton.clicked.connect(self.cleanup_sensitive_data)
+        layout.addWidget(self.cleanupButton)
     
     def scanFile(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select File")
@@ -363,8 +393,29 @@ class IntegrityCheckerGUI(QMainWindow):
         
         msg.exec_()
 
+    def cleanup_sensitive_data(self):
+        confirm = QMessageBox.question(
+            self,
+            "Confirm Cleanup",
+            "This will remove all API keys and credentials from .env!\nContinue?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if confirm == QMessageBox.Yes:
+            clean_env_file()
+            QMessageBox.information(
+                self,
+                "Cleanup Complete",
+                "Sensitive data removed from .env file"
+            )
+
 if __name__ == "__main__":
     app = QApplication([])
     window = IntegrityCheckerGUI()
     window.show()
     app.exec_()
+
+    # Cleanup
+    if os.getenv("AUTO_CLEANUP") == "1":
+        clean_env_file()
+    
+    sys.exit(app_exec)
