@@ -1,0 +1,7 @@
+.env
+file_integrity.db
+__pycache__/
+integrity.log
+*.pyc
+dist/
+build/

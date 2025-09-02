@@ -56,13 +56,8 @@ graph LR
 
 ---
 
-## **📌 4. Add a `.gitignore`**
-This prevents unnecessary files from being committed:
-
-
 ## Windows Users - Creating an EXE
 pyinstaller --onefile --windowed integrity_checker.py
-
 
 ###
 ```md
@@ -74,19 +69,13 @@ pyinstaller --onefile --windowed integrity_checker.py
 4️⃣ **Get Alerts** - If a file changes, you will receive an email alert.  
 
 ---
+## User Interface Screenshots
 
-## **📌 5. Push to GitHub**
-1. **Initialize Git:**
-   ```sh
-   git init
-   git add .
-   git commit -m "Initial commit"
+**Main Application Window:**  
+![Main UI](IntegrityChecker_1.jpg)
 
+**Configuration Dialog:**  
+![Settings](IntegrityChecker_2.jpg)
 
-## Push to GitHub
-git init
-git add .
-git commit -m "Secure integrity checker"
-git branch -M main
-git remote add origin https://github.com/mmcyberus/IntegrityChecker.git
-git push -u origin main
+**Cleanup Confirmation Dialog:**  
+![Cleanup Dialog](IntegrityChecker_3.jpg)
