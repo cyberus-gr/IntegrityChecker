@@ -418,4 +418,4 @@ if __name__ == "__main__":
     if os.getenv("AUTO_CLEANUP") == "1":
         clean_env_file()
     
-    sys.exit(app_exec)
+    sys.exit(app.exec_())
