@@ -5,9 +5,9 @@ import logging
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QFileDialog, QMessageBox, 
     QVBoxLayout, QWidget, QLineEdit, QDialog, QLabel, QDialogButtonBox,
-    QFormLayout
+    QFormLayout, QProgressBar
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 import os
 import datetime
 import requests
@@ -16,6 +16,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import re
 import sys
+import platform
+import subprocess
 
 # Initialize logging
 logging.basicConfig(
@@ -70,8 +72,12 @@ def compute_hash(file_path):
         logger.error(f"Error computing hash for {file_path}: {e}")
         return None
 
-def check_integrity(file_path):
-    conn = connect_db()
+def check_integrity(file_path, conn=None, commit_changes=True):
+    should_close = False
+    if conn is None:
+        conn = connect_db()
+        should_close = True
+        
     cur = conn.cursor()
     cur.execute("SELECT hash_value FROM file_integrity WHERE file_path = ?", (file_path,))
     result = cur.fetchone()
@@ -107,9 +113,12 @@ def check_integrity(file_path):
             "status = excluded.status",
             (file_path, new_hash, status))
     
-    conn.commit()
+    if commit_changes:
+        conn.commit()
     cur.close()
-    conn.close()
+    
+    if should_close:
+        conn.close()
     
     # Log and send alert if needed
     logger.info(f"{status}: {file_path}")
@@ -201,6 +210,10 @@ def clean_env_file():
     with open(env_path, 'w') as f:
         f.writelines(cleaned_lines)
 
+    # Also clear from memory
+    for key in sensitive_keys:
+        os.environ.pop(key, None)
+
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -230,6 +243,11 @@ class SettingsDialog(QDialog):
         self.recipientEdit = QLineEdit(os.getenv("ALERT_RECIPIENT", ""))
         layout.addRow("Alert Recipient:", self.recipientEdit)
         
+        # Test Email Button
+        self.testEmailButton = QPushButton("Test Email Connection")
+        self.testEmailButton.clicked.connect(self.test_email)
+        layout.addRow(self.testEmailButton)
+        
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.Save | QDialogButtonBox.Cancel,
@@ -240,6 +258,34 @@ class SettingsDialog(QDialog):
         
         layout.addRow(buttons)
         self.setLayout(layout)
+    
+    def test_email(self):
+        smtp_server = self.emailServerEdit.text()
+        smtp_port = self.emailPortEdit.text()
+        email_user = self.emailUserEdit.text()
+        email_pass = self.emailPassEdit.text()
+        recipient = self.recipientEdit.text()
+
+        if not all([smtp_server, smtp_port, email_user, email_pass, recipient]):
+            QMessageBox.warning(self, "Missing Info", "Please fill in all email fields to test.")
+            return
+
+        try:
+            port = int(smtp_port)
+            with smtplib.SMTP(smtp_server, port, timeout=10) as server:
+                server.starttls()
+                server.login(email_user, email_pass)
+                
+                msg = MIMEText("This is a test email from Integrity Checker.")
+                msg["Subject"] = "Integrity Checker Test"
+                msg["From"] = email_user
+                msg["To"] = recipient
+                
+                server.sendmail(email_user, recipient, msg.as_string())
+            
+            QMessageBox.information(self, "Success", "Test email sent successfully!")
+        except Exception as e:
+            QMessageBox.critical(self, "Connection Failed", f"Failed to send test email:\n{e}")
     
     def save_settings(self):
         # Validate port number
@@ -298,6 +344,74 @@ class SettingsDialog(QDialog):
         QMessageBox.information(self, "Success", "Settings saved successfully!")
         self.accept()
 
+
+
+class ScanWorker(QThread):
+    progress_updated = pyqtSignal(int, str)  # percent, current file
+    scan_finished = pyqtSignal(str) # summary
+    error_occurred = pyqtSignal(str) # error message
+
+    def __init__(self, folder):
+        super().__init__()
+        self.folder = folder
+        self._is_running = True
+
+    def run(self):
+        conn = connect_db()
+        stats = {"Secure": 0, "Modified": 0, "Missing": 0, "New": 0}
+        total_files = 0
+        processed_files = 0
+        
+        try:
+            # First pass: count files for progress bar
+            for root, _, files in os.walk(self.folder):
+                if not self._is_running: break
+                total_files += len(files)
+            
+            if total_files == 0:
+                self.scan_finished.emit("No files found to scan.")
+                conn.close()
+                return
+
+            # Second pass: process files
+            for root, _, files in os.walk(self.folder):
+                if not self._is_running: break
+                
+                for file in files:
+                    if not self._is_running: break
+                    
+                    file_path = os.path.join(root, file)
+                    status, _ = check_integrity(file_path, conn=conn, commit_changes=False)
+                    
+                    if status in stats:
+                        stats[status] += 1
+                    
+                    processed_files += 1
+                    progress_percent = int((processed_files / total_files) * 100)
+                    self.progress_updated.emit(progress_percent, f"Scanning: {file}")
+            
+            if self._is_running:
+                conn.commit()
+                summary = (
+                    f"Scanned {total_files} files.\n\n"
+                    f"✅ Secure: {stats['Secure']}\n"
+                    f"ℹ️ New: {stats['New']}\n"
+                    f"⚠️ Modified: {stats['Modified']}\n"
+                    f"❌ Missing: {stats['Missing']}"
+                )
+                self.scan_finished.emit(summary)
+            else:
+                self.scan_finished.emit("Scan cancelled.")
+
+        except Exception as e:
+            logger.error(f"Scan error: {e}")
+            self.error_occurred.emit(str(e))
+        finally:
+            conn.close()
+
+    def stop(self):
+        self._is_running = False
+
 class IntegrityCheckerGUI(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -329,6 +443,21 @@ class IntegrityCheckerGUI(QMainWindow):
         self.statusButton.clicked.connect(self.showStatus)
         layout.addWidget(self.statusButton)
 
+        self.progressBar = QProgressBar()
+        self.progressBar.setValue(0)
+        self.progressBar.setVisible(False)
+        layout.addWidget(self.progressBar)
+
+        self.statusLabel = QLabel("")
+        self.statusLabel.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.statusLabel)
+
+        self.cancelButton = QPushButton("Cancel Scan")
+        self.cancelButton.clicked.connect(self.cancelScan)
+        self.cancelButton.setVisible(False)
+        self.cancelButton.setStyleSheet("background-color: #ffcccc; color: red;")
+        layout.addWidget(self.cancelButton)
+
         self.cleanupButton = QPushButton("Clear Sensitive Data")
         self.cleanupButton.clicked.connect(self.cleanup_sensitive_data)
         layout.addWidget(self.cleanupButton)
@@ -340,23 +469,78 @@ class IntegrityCheckerGUI(QMainWindow):
     
     def scanFolder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
-        if folder:
-            for root, _, files in os.walk(folder):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    self.process_file(file_path)
+        if not folder:
+            return
+
+        # UI State for scanning
+        self.scanButton.setEnabled(False)
+        self.scanFolderButton.setEnabled(False)
+        self.settingsButton.setEnabled(False)
+        self.cleanupButton.setEnabled(False)
+        
+        self.progressBar.setVisible(True)
+        self.progressBar.setValue(0)
+        self.cancelButton.setVisible(True)
+        self.statusLabel.setText("Preparing scan...")
+
+        # Setup Thread
+        self.worker = ScanWorker(folder)
+        self.worker.progress_updated.connect(self.updateProgress)
+        self.worker.scan_finished.connect(self.scanFinished)
+        self.worker.error_occurred.connect(self.scanError)
+        self.worker.start()
+
+    def updateProgress(self, percent, message):
+        self.progressBar.setValue(percent)
+        self.statusLabel.setText(message)
+
+    def scanFinished(self, summary):
+        self.resetUI()
+        QMessageBox.information(self, "Scan Result", summary)
+
+    def scanError(self, error_msg):
+        self.resetUI()
+        QMessageBox.critical(self, "Error", f"An error occurred: {error_msg}")
+
+    def cancelScan(self):
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.worker.stop()
+            self.statusLabel.setText("Cancelling...")
+            self.worker.wait() # Wait for thread to finish cleanup
+            self.resetUI()
+            QMessageBox.information(self, "Cancelled", "Scan cancelled by user.")
+
+    def resetUI(self):
+        self.scanButton.setEnabled(True)
+        self.scanFolderButton.setEnabled(True)
+        self.settingsButton.setEnabled(True)
+        self.cleanupButton.setEnabled(True)
+        
+        self.progressBar.setVisible(False)
+        self.cancelButton.setVisible(False)
+        self.statusLabel.setText("")
     
     def showSettings(self):
         dialog = SettingsDialog(self)
         dialog.exec_()
     
     def showStatus(self):
+        log_file = "integrity.log"
+        if not os.path.exists(log_file):
+            QMessageBox.warning(self, "File Not Found", "Log file does not exist yet.")
+            return
+
         try:
-            os.startfile("integrity.log")
-        except:
+            if platform.system() == "Darwin":  # macOS
+                subprocess.call(('open', log_file))
+            elif platform.system() == "Windows":  # Windows
+                os.startfile(log_file)
+            else:  # Linux
+                subprocess.call(('xdg-open', log_file))
+        except Exception as e:
             msg = QMessageBox()
             msg.setWindowTitle("Scan History")
-            msg.setText("Open integrity.log to view complete scan history")
+            msg.setText(f"Could not open log file: {e}\n\nPlease open 'integrity.log' manually.")
             msg.exec_()
     
     def process_file(self, file_path):
@@ -412,7 +596,7 @@ if __name__ == "__main__":
     app = QApplication([])
     window = IntegrityCheckerGUI()
     window.show()
-    app.exec_()
+
 
     # Cleanup
     if os.getenv("AUTO_CLEANUP") == "1":
