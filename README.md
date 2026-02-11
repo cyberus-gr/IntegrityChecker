@@ -56,6 +56,30 @@ A robust, cross-platform file integrity monitoring tool with a responsive GUI, b
 
 ---
 
+## Security Workflow
+
+```mermaid
+graph TD
+    A[Start App] --> B[Configure Settings]
+    B --> C[Enter API Keys/Email]
+    C --> D[Run Scans]
+    D --> E{Finished?}
+    E -->|Yes| F[Click 'Clear Sensitive Data']
+    F --> G[Keys wiped from .env file]
+    F --> H[Keys wiped from RAM]
+    G & H --> I[Safe to Close]
+    E -->|No| D
+```
+
+### Best Practices
+- **Memory Cleanup**: The application now supports **True Cleanup**. Clicking "Clear Sensitive Data" removes credentials from both the file and the running process memory.
+- **File Permissions**: For extra security on shared machines (Linux/macOS), you can lock the configuration file after setup:
+  ```bash
+  chmod 600 .env
+  ```
+
+---
+
 ## Creating an Executable
 
 To bundle the application into a single standalone executable:
