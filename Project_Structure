@@ -1,11 +1,7 @@
 IntegrityChecker/
-│── integrity_checker.py  # Main script
-│── database.py           # Database functions
-│── hashing.py            # Hashing functions
-│── scanner.py            # Directory scanning functions
-│── gui.py                # GUI with Tkinter
-│── email_alerts.py       # Email notification module
-│── README.md             # Documentation
-│── requirements.txt      # Dependencies
-│── LICENSE               # Open-source license
-│── .gitignore            # Ignore unnecessary files
+├── integritychecker.py   # Main application logic (GUI, Database, Scanning)
+├── requirements.txt      # Project dependencies
+├── README.md             # Project documentation
+├── .env                  # Configuration file (Gitignored)
+├── integrity.log         # Application log file
+└── file_integrity.db     # SQLite database
