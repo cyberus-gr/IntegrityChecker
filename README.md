@@ -1,6 +1,11 @@
 # File Integrity Checker
 
-A robust, cross-platform file integrity monitoring tool with a responsive GUI, background scanning, automated SQL storage, and email alerts. Now supports Windows, macOS, and Linux.
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#)
+[![Lint](https://img.shields.io/badge/Lint-flake8-brightgreen)](https://github.com/mmcyberus/IntegrityChecker/actions)
+
+A robust, cross-platform file integrity monitoring tool with a responsive GUI, background scanning, automated SQL storage, and email alerts. Supports Windows, macOS, and Linux.
 
 ## Features
 
@@ -14,6 +19,20 @@ A robust, cross-platform file integrity monitoring tool with a responsive GUI, b
 - **📊 Scan History Viewer**: Built-in color-coded table showing every scanned file's status, hash, and timestamp — with live search and one-click CSV export.
 - **🔐 Lock Baseline**: Accept the current state of modified files as the new trusted baseline with a single click — a feature found only in enterprise tools like Tripwire.
 - **🎨 Modern Dark UI**: Clean dark theme with a polished stylesheet, making it easy to use on any machine.
+
+---
+
+## Screenshots
+
+> **Take these screenshots after running the app and replace the placeholders below.**
+
+| Main Window | Scan History Viewer |
+|:-----------:|:-------------------:|
+| *(add screenshot)* | *(add screenshot)* |
+
+| Local Hash Report | Settings |
+|:-----------------:|:--------:|
+| *(add screenshot)* | *(add screenshot)* |
 
 ---
 

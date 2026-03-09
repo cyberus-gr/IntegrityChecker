@@ -3,13 +3,15 @@ import sqlite3
 import csv
 import fnmatch
 import platform
+
+__version__ = "1.0.0"
 from dotenv import load_dotenv
 import logging
 from logging.handlers import RotatingFileHandler
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QFileDialog, QMessageBox,
     QVBoxLayout, QHBoxLayout, QWidget, QLineEdit, QDialog, QLabel,
-    QDialogButtonBox, QFormLayout, QProgressBar,
+    QDialogButtonBox, QFormLayout, QProgressBar, QCheckBox,
     QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
@@ -44,6 +46,7 @@ if not os.path.exists('.env'):
         f.write("EMAIL_PASSWORD=\n")
         f.write("ALERT_RECIPIENT=\n")
         f.write("EXCLUDE_PATTERNS=.git,__pycache__,*.pyc,node_modules\n")
+        f.write("VT_ENABLED=1\n")
     # Restrict permissions so only the owner can read the file (no effect on Windows)
     os.chmod('.env', 0o600)
 
@@ -90,6 +93,36 @@ def compute_hash(file_path):
     except Exception as e:
         logger.error(f"Error computing hash for {file_path}: {e}")
         return None
+
+
+def compute_all_hashes(file_path):
+    """Compute MD5, SHA-1, and SHA-256 in a single file read. Returns a dict or None on error."""
+    h_md5 = hashlib.md5()
+    h_sha1 = hashlib.sha1()
+    h_sha256 = hashlib.sha256()
+    try:
+        with open(file_path, "rb") as f:
+            while chunk := f.read(4096):
+                h_md5.update(chunk)
+                h_sha1.update(chunk)
+                h_sha256.update(chunk)
+        return {
+            "md5":    h_md5.hexdigest(),
+            "sha1":   h_sha1.hexdigest(),
+            "sha256": h_sha256.hexdigest(),
+        }
+    except Exception as e:
+        logger.error(f"Error computing hashes for {file_path}: {e}")
+        return None
+
+
+def _format_size(size_bytes):
+    """Return a human-readable file size string."""
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size_bytes < 1024:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024
+    return f"{size_bytes:.1f} TB"
 
 
 def check_integrity(file_path, conn=None, commit_changes=True):
@@ -382,6 +415,10 @@ class SettingsDialog(QDialog):
         layout = QFormLayout()
 
         # VirusTotal API
+        self.vtEnabledCheck = QCheckBox("Enable VirusTotal scanning")
+        self.vtEnabledCheck.setChecked(os.getenv("VT_ENABLED", "1") == "1")
+        layout.addRow(self.vtEnabledCheck)
+
         self.vtApiEdit = QLineEdit(os.getenv("VT_API_KEY", ""))
         self.vtApiEdit.setEchoMode(QLineEdit.Password)
         layout.addRow("VirusTotal API Key:", self.vtApiEdit)
@@ -475,6 +512,7 @@ class SettingsDialog(QDialog):
 
         new_env = []
         settings = {
+            "VT_ENABLED": "1" if self.vtEnabledCheck.isChecked() else "0",
             "VT_API_KEY": self.vtApiEdit.text(),
             "EMAIL_SERVER": self.emailServerEdit.text(),
             "EMAIL_PORT": self.emailPortEdit.text(),
@@ -592,6 +630,54 @@ class ScanWorker(QThread):
 
     def stop(self):
         self._is_running = False
+
+
+# ---------------------------------------------------------------------------
+# About dialog
+# ---------------------------------------------------------------------------
+
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("About File Integrity Checker")
+        self.setFixedSize(360, 210)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+
+        title = QLabel("File Integrity Checker")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #89b4fa;")
+        layout.addWidget(title)
+
+        version_label = QLabel(f"Version {__version__}")
+        version_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(version_label)
+
+        desc = QLabel(
+            "Cross-platform file integrity monitoring.\n"
+            "SHA-256 · SHA-1 · MD5 hashing  |  VirusTotal integration\n"
+            "Email alerts  |  Baseline locking  |  CSV export"
+        )
+        desc.setAlignment(Qt.AlignCenter)
+        layout.addWidget(desc)
+
+        link = QLabel(
+            '<a href="https://github.com/mmcyberus/IntegrityChecker" '
+            'style="color:#89b4fa;">github.com/mmcyberus/IntegrityChecker</a>'
+            "  ·  MIT License"
+        )
+        link.setAlignment(Qt.AlignCenter)
+        link.setOpenExternalLinks(True)
+        link.setStyleSheet("font-size: 11px; color: #585b70;")
+        layout.addWidget(link)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+
+        self.setLayout(layout)
 
 
 # ---------------------------------------------------------------------------
@@ -759,6 +845,10 @@ class IntegrityCheckerGUI(QMainWindow):
         self.cleanupButton.clicked.connect(self.cleanup_sensitive_data)
         layout.addWidget(self.cleanupButton)
 
+        self.aboutButton = QPushButton("About")
+        self.aboutButton.clicked.connect(self.showAbout)
+        layout.addWidget(self.aboutButton)
+
     def scanFile(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select File")
         if file_path:
@@ -780,7 +870,7 @@ class IntegrityCheckerGUI(QMainWindow):
 
     def _set_scanning_ui(self, scanning: bool):
         for btn in [self.scanButton, self.scanFolderButton, self.lockBaselineButton,
-                    self.settingsButton, self.statusButton, self.cleanupButton]:
+                    self.settingsButton, self.statusButton, self.cleanupButton, self.aboutButton]:
             btn.setEnabled(not scanning)
         self.progressBar.setVisible(scanning)
         self.cancelButton.setVisible(scanning)
@@ -810,6 +900,9 @@ class IntegrityCheckerGUI(QMainWindow):
             self._set_scanning_ui(False)
             self.statusLabel.setText("")
             QMessageBox.information(self, "Cancelled", "Scan cancelled by user.")
+
+    def showAbout(self):
+        AboutDialog(self).exec_()
 
     def showSettings(self):
         dialog = SettingsDialog(self)
@@ -866,36 +959,65 @@ class IntegrityCheckerGUI(QMainWindow):
 
     def process_file(self, file_path):
         status, hash_value = check_integrity(file_path)
-        vt_msg = ""
+        extra = ""
 
-        # Only query VirusTotal if an API key is configured
-        if status != "Missing" and hash_value and os.getenv("VT_API_KEY"):
-            try:
-                malicious, suspicious = check_virustotal(hash_value)
-                if malicious is None or suspicious is None:
-                    vt_msg = "\n⚠️ VirusTotal check failed"
-                elif malicious > 0 or suspicious > 0:
-                    vt_msg = f"\n⚠️ VirusTotal: Malicious={malicious}, Suspicious={suspicious}"
-                else:
-                    vt_msg = "\n✅ VirusTotal: No threats detected"
-            except Exception as e:
-                vt_msg = f"\n⚠️ VirusTotal error: {str(e)}"
+        vt_enabled = os.getenv("VT_ENABLED", "1") == "1"
+        vt_key = os.getenv("VT_API_KEY", "")
+
+        if status != "Missing" and hash_value:
+            if vt_enabled and vt_key:
+                # --- VirusTotal path ---
+                try:
+                    malicious, suspicious = check_virustotal(hash_value)
+                    if malicious is None or suspicious is None:
+                        extra = "\n⚠️ VirusTotal check failed"
+                    elif malicious > 0 or suspicious > 0:
+                        extra = f"\n⚠️ VirusTotal: Malicious={malicious}, Suspicious={suspicious}"
+                    else:
+                        extra = "\n✅ VirusTotal: No threats detected"
+                except Exception as e:
+                    extra = f"\n⚠️ VirusTotal error: {e}"
+            else:
+                # --- Local-only path: compute all three hashes and file metadata ---
+                hashes = compute_all_hashes(file_path)
+                try:
+                    stat = os.stat(file_path)
+                    size_str = _format_size(stat.st_size)
+                    mtime = datetime.datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                except OSError:
+                    size_str = "unknown"
+                    mtime = "unknown"
+
+                if hashes:
+                    extra = (
+                        f"\n\n── Local Hash Analysis ──"
+                        f"\n  SHA-256 : {hashes['sha256']}"
+                        f"\n  SHA-1   : {hashes['sha1']}"
+                        f"\n  MD5     : {hashes['md5']}"
+                        f"\n\n── File Metadata ──"
+                        f"\n  Size    : {size_str}"
+                        f"\n  Modified: {mtime}"
+                    )
+                if not vt_enabled:
+                    extra += "\n\n[VirusTotal disabled in settings]"
+                elif not vt_key:
+                    extra += "\n\n[VirusTotal API key not configured]"
 
         msg = QMessageBox()
         msg.setWindowTitle("Integrity Check Result")
 
         if status == "Secure":
             msg.setIcon(QMessageBox.Information)
-            msg.setText(f"✅ File is secure\n\nPath: {file_path}{vt_msg}")
+            msg.setText(f"✅ File is secure\n\nPath: {file_path}{extra}")
         elif status == "Modified":
             msg.setIcon(QMessageBox.Warning)
-            msg.setText(f"⚠️ File modified!\n\nPath: {file_path}{vt_msg}")
+            msg.setText(f"⚠️ File modified!\n\nPath: {file_path}{extra}")
         elif status == "Missing":
             msg.setIcon(QMessageBox.Critical)
-            msg.setText(f"❌ File missing\n\nPath: {file_path}{vt_msg}")
+            msg.setText(f"❌ File missing\n\nPath: {file_path}")
         elif status == "New":
             msg.setIcon(QMessageBox.Information)
-            msg.setText(f"ℹ️ New file added\n\nPath: {file_path}{vt_msg}")
+            msg.setText(f"ℹ️ New file added\n\nPath: {file_path}{extra}")
 
         msg.exec_()
 
