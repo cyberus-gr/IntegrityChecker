@@ -1,0 +1,33 @@
+name: Security Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  secret-scan:
+    name: Secret Scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint-python:
+    name: Python Lint & Safety
+    runs-on: ubuntu-latest
+    if: contains(github.repository, 'Python') || contains(github.repository, 'Yara') || contains(github.repository, 'IntegrityChecker')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install flake8 bandit safety
+      - run: flake8 . --max-line-length=120 --exclude=.git
+      - run: bandit -r . -ll          # flags high/medium severity issues
+      - run: safety check             # checks dependencies for known CVEs
